@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CyberScout — Vulnerability Scanner</title>
+<style>
+:root {
+  --bg:       #0d1117;
+  --surface:  #161b22;
+  --border:   #30363d;
+  --accent:   #00c8b4;
+  --accent2:  #58a6ff;
+  --text:     #e6edf3;
+  --muted:    #8b949e;
+  --critical: #da3545;
+  --high:     #ff6600;
+  --medium:   #ffc107;
+  --low:      #28a745;
+  --info:     #17a2b8;
+  --radius:   8px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+/* ── Layout ── */
+.topbar { background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; padding: 0 24px; height: 56px; }
+.logo { font-size: 1.25rem; font-weight: 700; color: var(--accent); letter-spacing: 1px; }
+.user-area { display: flex; align-items: center; gap: 12px; font-size: .875rem; color: var(--muted); }
+.btn { padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: .875rem; font-weight: 600; transition: opacity .15s; }
+.btn:hover { opacity: .85; }
+.btn-accent  { background: var(--accent); color: #000; }
+.btn-ghost   { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.btn-danger  { background: var(--critical); color: #fff; }
+.btn-sm { padding: 4px 10px; font-size: .8rem; }
+
+.layout { display: flex; min-height: calc(100vh - 56px); }
+.sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); padding: 16px 0; flex-shrink: 0; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 20px; cursor: pointer;
+  color: var(--muted); font-size: .875rem; transition: all .15s; }
+.nav-item:hover, .nav-item.active { color: var(--text); background: rgba(255,255,255,.05); }
+.nav-item.active { border-left: 3px solid var(--accent); }
+.main { flex: 1; padding: 24px; overflow-y: auto; }
+
+/* ── Cards ── */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+.card-title { font-size: 1rem; font-weight: 600; margin-bottom: 16px; color: var(--text); }
+.section-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 20px; }
+
+/* ── Stat chips ── */
+.stats-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+.stat-chip { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px 18px; min-width: 120px; text-align: center; }
+.stat-chip .num { font-size: 1.75rem; font-weight: 700; }
+.stat-chip .lbl { font-size: .75rem; color: var(--muted); margin-top: 2px; }
+
+/* ── Severity badges ── */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: .72rem;
+  font-weight: 700; text-transform: uppercase; color: #fff; }
+.badge.critical { background: var(--critical); }
+.badge.high     { background: var(--high); }
+.badge.medium   { background: var(--medium); color: #000; }
+.badge.low      { background: var(--low); }
+.badge.info     { background: var(--info); }
+
+/* ── Scan form ── */
+.form-row { margin-bottom: 16px; }
+label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 6px; }
+input[type=text], input[type=password], input[type=number] {
+  width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  padding: 8px 12px; border-radius: 6px; font-size: .9rem; outline: none; }
+input:focus { border-color: var(--accent); }
+.modules-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.module-card { border: 1px solid var(--border); border-radius: 6px; padding: 12px;
+  cursor: pointer; text-align: center; font-size: .85rem; transition: all .15s; user-select: none; }
+.module-card:hover { border-color: var(--accent); }
+.module-card.selected { border-color: var(--accent); background: rgba(0,200,180,.1); color: var(--accent); }
+.module-icon { font-size: 1.5rem; margin-bottom: 4px; }
+
+/* ── Progress ── */
+.progress-wrap { background: var(--border); border-radius: 99px; height: 8px; overflow: hidden; margin: 8px 0; }
+.progress-bar  { height: 100%; background: var(--accent); border-radius: 99px; transition: width .4s; }
+
+/* ── Findings list ── */
+.finding-item { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px; overflow: hidden; }
+.finding-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  cursor: pointer; background: rgba(255,255,255,.02); }
+.finding-header:hover { background: rgba(255,255,255,.05); }
+.finding-body { padding: 12px 14px; border-top: 1px solid var(--border); font-size: .85rem;
+  display: none; line-height: 1.6; }
+.finding-body.open { display: block; }
+.finding-body .row { margin-bottom: 8px; }
+.finding-body .row strong { color: var(--muted); display: inline-block; min-width: 130px; }
+.finding-body code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-size: .8rem; }
+
+/* ── History table ── */
+table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+th { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--muted); font-weight: 600; }
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+tr:hover td { background: rgba(255,255,255,.02); }
+
+/* ── Auth modal ── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 100;
+  display: flex; align-items: center; justify-content: center; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 28px; width: 360px; }
+.modal-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 20px; }
+.modal-tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
+.modal-tab { padding: 8px 16px; cursor: pointer; font-size: .875rem; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.modal-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.error-msg { color: var(--critical); font-size: .8rem; margin-top: 6px; }
+.risk-score { font-size: 2rem; font-weight: 800; }
+
+/* ── Tabs ── */
+.page { display: none; }
+.page.active { display: block; }
+
+/* ── Toast ── */
+.toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 18px; font-size: .875rem; z-index: 200; opacity: 0; transition: opacity .3s;
+  max-width: 320px; }
+.toast.show { opacity: 1; }
+.toast.success { border-color: var(--low); }
+.toast.error   { border-color: var(--critical); }
+
+@media (max-width: 640px) {
+  .sidebar { display: none; }
+  .stats-row { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="topbar">
+  <div class="logo">⚡ CyberScout</div>
+  <div class="user-area">
+    <span id="username-display" style="display:none"></span>
+    <button class="btn btn-ghost btn-sm" id="auth-btn" onclick="showAuth()">Sign In</button>
+    <button class="btn btn-ghost btn-sm" id="logout-btn" style="display:none" onclick="logout()">Sign Out</button>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="nav-item active" onclick="navigate('scan')">🔍 New Scan</div>
+    <div class="nav-item" onclick="navigate('history')">📋 Scan History</div>
+    <div class="nav-item" onclick="navigate('stats')">📊 Statistics</div>
+  </nav>
+
+  <!-- Main content -->
+  <main class="main">
+
+    <!-- ── New Scan ── -->
+    <div class="page active" id="page-scan">
+      <div class="section-title">New Vulnerability Scan</div>
+
+      <div class="card">
+        <div class="card-title">Target & Modules</div>
+        <div class="form-row">
+          <label>Target URL or IP</label>
+          <input type="text" id="target" placeholder="https://example.com or 192.168.1.1"/>
+        </div>
+        <div class="form-row">
+          <label>Select Modules</label>
+          <div class="modules-grid" id="modules-grid">
+            <div class="module-card" data-mod="headers" onclick="toggleModule(this)">
+              <div class="module-icon">🛡️</div>Headers
+            </div>
+            <div class="module-card" data-mod="ssl" onclick="toggleModule(this)">
+              <div class="module-icon">🔒</div>SSL/TLS
+            </div>
+            <div class="module-card" data-mod="ports" onclick="toggleModule(this)">
+              <div class="module-icon">📡</div>Port Scan
+            </div>
+            <div class="module-card" data-mod="sqli" onclick="toggleModule(this)">
+              <div class="module-icon">💉</div>SQL Injection
+            </div>
+            <div class="module-card" data-mod="xss" onclick="toggleModule(this)">
+              <div class="module-icon">⚠️</div>XSS
+            </div>
+            <div class="module-card" data-mod="dirs" onclick="toggleModule(this)">
+              <div class="module-icon">📂</div>Dir Brute
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:8px;">
+          <button class="btn btn-accent" onclick="startScan()">▶ Start Scan</button>
+          <button class="btn btn-ghost" onclick="selectAllModules()">Select All</button>
+        </div>
+      </div>
+
+      <!-- Progress -->
+      <div class="card" id="progress-card" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span class="card-title" style="margin:0;">Scan Progress</span>
+          <span id="scan-id-display" style="font-size:.8rem;color:var(--muted);"></span>
+        </div>
+        <div class="progress-wrap"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
+        <div id="progress-text" style="font-size:.85rem;color:var(--muted);margin-top:6px;"></div>
+      </div>
+
+      <!-- Results -->
+      <div id="results-section" style="display:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div class="section-title" style="margin:0;">Results</div>
+          <button class="btn btn-ghost btn-sm" id="download-btn" onclick="downloadReport()">⬇ Download PDF</button>
+        </div>
+
+        <!-- Summary chips -->
+        <div class="stats-row" id="summary-chips"></div>
+
+        <!-- Risk score -->
+        <div class="card" style="margin-bottom:16px;display:flex;align-items:center;gap:20px;">
+          <div>
+            <div style="font-size:.8rem;color:var(--muted);margin-bottom:4px;">Overall Risk Score</div>
+            <div class="risk-score" id="risk-score-val">—</div>
+            <div id="risk-label" style="font-size:.8rem;margin-top:2px;"></div>
+          </div>
+          <div style="flex:1;max-width:300px;" id="severity-bars"></div>
+        </div>
+
+        <!-- Filter -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;" id="filter-row">
+          <button class="btn btn-ghost btn-sm active-filter" onclick="filterFindings('all',this)">All</button>
+          <button class="btn btn-ghost btn-sm" onclick="filterFindings('critical',this)">Critical</button>
+          <button class="btn btn-ghost btn-sm" onclick="filterFindings('high',this)">High</button>
+          <button class="btn btn-ghost btn-sm" onclick="filterFindings('medium',this)">Medium</button>
+          <button class="btn btn-ghost btn-sm" onclick="filterFindings('low',this)">Low</button>
+          <button class="btn btn-ghost btn-sm" onclick="filterFindings('info',this)">Info</button>
+        </div>
+
+        <div id="findings-list"></div>
+      </div>
+    </div>
+
+    <!-- ── Scan History ── -->
+    <div class="page" id="page-history">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <div class="section-title" style="margin:0;">Scan History</div>
+        <button class="btn btn-ghost btn-sm" onclick="loadHistory()">↻ Refresh</button>
+      </div>
+      <div class="card" id="history-content">
+        <p style="color:var(--muted);font-size:.875rem;">Sign in to view your scan history.</p>
+      </div>
+    </div>
+
+    <!-- ── Statistics ── -->
+    <div class="page" id="page-stats">
+      <div class="section-title">Statistics</div>
+      <div id="stats-content">
+        <p style="color:var(--muted);font-size:.875rem;">Sign in to view statistics.</p>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Auth Modal -->
+<div class="modal-overlay" id="auth-modal" style="display:none;">
+  <div class="modal">
+    <div class="modal-title">CyberScout Account</div>
+    <div class="modal-tabs">
+      <div class="modal-tab active" onclick="switchAuthTab('login')">Sign In</div>
+      <div class="modal-tab" onclick="switchAuthTab('register')">Register</div>
+    </div>
+    <div id="auth-login">
+      <div class="form-row">
+        <label>Username</label>
+        <input type="text" id="login-user" placeholder="Username" onkeydown="if(e.key==='Enter')doLogin()"/>
+      </div>
+      <div class="form-row">
+        <label>Password</label>
+        <input type="password" id="login-pass" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()"/>
+      </div>
+      <div class="error-msg" id="login-error"></div>
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button class="btn btn-accent" style="flex:1" onclick="doLogin()">Sign In</button>
+        <button class="btn btn-ghost" onclick="closeAuth()">Cancel</button>
+      </div>
+    </div>
+    <div id="auth-register" style="display:none;">
+      <div class="form-row">
+        <label>Username</label>
+        <input type="text" id="reg-user" placeholder="Min 3 characters"/>
+      </div>
+      <div class="form-row">
+        <label>Password</label>
+        <input type="password" id="reg-pass" placeholder="Min 8 characters"/>
+      </div>
+      <div class="error-msg" id="reg-error"></div>
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button class="btn btn-accent" style="flex:1" onclick="doRegister()">Create Account</button>
+        <button class="btn btn-ghost" onclick="closeAuth()">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let currentScanId = null;
+let pollInterval  = null;
+let allFindings   = [];
+let currentUser   = null;
+
+// ── Navigation ─────────────────────────────────────────────────────────────
+function navigate(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  event.currentTarget.classList.add('active');
+
+  if (page === 'history') loadHistory();
+  if (page === 'stats')   loadStats();
+}
+
+// ── Auth ───────────────────────────────────────────────────────────────────
+function showAuth()  { document.getElementById('auth-modal').style.display='flex'; }
+function closeAuth() { document.getElementById('auth-modal').style.display='none'; }
+
+function switchAuthTab(tab) {
+  document.querySelectorAll('.modal-tab').forEach((t,i) => t.classList.toggle('active', (tab==='login'?i===0:i===1)));
+  document.getElementById('auth-login').style.display    = tab==='login'    ? 'block':'none';
+  document.getElementById('auth-register').style.display = tab==='register' ? 'block':'none';
+}
+
+async function doLogin() {
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value;
+  const r = await fetch('/auth/login', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({username:u, password:p})});
+  const d = await r.json();
+  if (!r.ok) { document.getElementById('login-error').textContent = d.error; return; }
+  currentUser = d.user;
+  updateUserUI();
+  closeAuth();
+  toast('Signed in as ' + currentUser.username, 'success');
+}
+
+async function doRegister() {
+  const u = document.getElementById('reg-user').value.trim();
+  const p = document.getElementById('reg-pass').value;
+  const r = await fetch('/auth/register', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({username:u, password:p})});
+  const d = await r.json();
+  if (!r.ok) { document.getElementById('reg-error').textContent = d.error; return; }
+  toast('Account created! Signing you in…', 'success');
+  document.getElementById('login-user').value = u;
+  document.getElementById('login-pass').value = p;
+  switchAuthTab('login');
+  await doLogin();
+}
+
+async function logout() {
+  await fetch('/auth/logout', {method:'POST'});
+  currentUser = null;
+  updateUserUI();
+  toast('Signed out', 'success');
+}
+
+function updateUserUI() {
+  const disp    = document.getElementById('username-display');
+  const authBtn = document.getElementById('auth-btn');
+  const logBtn  = document.getElementById('logout-btn');
+  if (currentUser) {
+    disp.textContent = '👤 ' + currentUser.username + (currentUser.is_admin ? ' (admin)' : '');
+    disp.style.display = 'block';
+    authBtn.style.display = 'none';
+    logBtn.style.display  = 'block';
+  } else {
+    disp.style.display = 'none';
+    authBtn.style.display = 'block';
+    logBtn.style.display  = 'none';
+  }
+}
+
+async function checkSession() {
+  try {
+    const r = await fetch('/auth/me');
+    if (r.ok) { currentUser = (await r.json()); updateUserUI(); }
+  } catch {}
+}
+
+// ── Scan ───────────────────────────────────────────────────────────────────
+function toggleModule(el) { el.classList.toggle('selected'); }
+
+function selectAllModules() {
+  document.querySelectorAll('.module-card').forEach(c => c.classList.add('selected'));
+}
+
+function getSelectedModules() {
+  return [...document.querySelectorAll('.module-card.selected')].map(c => c.dataset.mod);
+}
+
+async function startScan() {
+  const target  = document.getElementById('target').value.trim();
+  const modules = getSelectedModules();
+
+  if (!target)         { toast('Enter a target URL', 'error'); return; }
+  if (!modules.length) { toast('Select at least one module', 'error'); return; }
+
+  const scanId = 'scan_' + Date.now().toString(36);
+  currentScanId = scanId;
+
+  document.getElementById('progress-card').style.display   = 'block';
+  document.getElementById('results-section').style.display = 'none';
+  document.getElementById('scan-id-display').textContent   = 'ID: ' + scanId;
+  document.getElementById('progress-bar').style.width      = '0%';
+  document.getElementById('progress-text').textContent     = 'Starting...';
+
+  const r = await fetch('/api/scan', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({target, modules, scan_id: scanId})
+  });
+  const d = await r.json();
+
+  if (!r.ok) { toast(d.error || 'Scan failed', 'error'); return; }
+
+  toast('Scan started!', 'success');
+  pollInterval = setInterval(() => pollStatus(scanId), 1500);
+}
+
+async function pollStatus(scanId) {
+  const r  = await fetch('/api/status/' + scanId);
+  const d  = await r.json();
+  const pb = document.getElementById('progress-bar');
+  const pt = document.getElementById('progress-text');
+
+  pb.style.width    = (d.progress || 0) + '%';
+  pt.textContent    = d.current || '';
+
+  if (d.status === 'complete') {
+    clearInterval(pollInterval);
+    pb.style.width = '100%';
+    pt.textContent = '✅ Scan complete';
+    await loadResults(scanId);
+  }
+}
+
+async function loadResults(scanId) {
+  const r = await fetch('/api/results/' + scanId);
+  const d = await r.json();
+
+  allFindings = d.findings || [];
+  renderSummary(d.summary);
+  renderFindings(allFindings);
+  document.getElementById('results-section').style.display = 'block';
+}
+
+function renderSummary(s) {
+  const colors = {critical:'var(--critical)',high:'var(--high)',medium:'var(--medium)',low:'var(--low)',info:'var(--info)'};
+  const chips  = document.getElementById('summary-chips');
+  chips.innerHTML = '';
+
+  const sevs = ['critical','high','medium','low','info'];
+  sevs.forEach(sev => {
+    const c = document.createElement('div');
+    c.className = 'stat-chip';
+    c.style.borderColor = colors[sev];
+    c.innerHTML = `<div class="num" style="color:${colors[sev]}">${s[sev]||0}</div><div class="lbl">${sev.toUpperCase()}</div>`;
+    chips.appendChild(c);
+  });
+
+  // Risk score
+  const score = s.risk_score || 0;
+  const rsv   = document.getElementById('risk-score-val');
+  const rl    = document.getElementById('risk-label');
+  rsv.textContent = score;
+  rsv.style.color = score >= 70 ? 'var(--critical)' : score >= 40 ? 'var(--high)' : 'var(--low)';
+  rl.textContent  = score >= 70 ? 'HIGH RISK' : score >= 40 ? 'MEDIUM RISK' : 'LOW RISK';
+  rl.style.color  = rsv.style.color;
+
+  // Severity bars
+  const maxCount = Math.max(...sevs.map(s2 => s[s2]||0), 1);
+  const bars = document.getElementById('severity-bars');
+  bars.innerHTML = sevs.map(sev => {
+    const pct = Math.round(((s[sev]||0) / maxCount) * 100);
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:.75rem;">
+      <span style="width:55px;color:var(--muted)">${sev}</span>
+      <div style="flex:1;background:var(--border);border-radius:99px;height:6px;overflow:hidden;">
+        <div style="width:${pct}%;height:100%;background:${colors[sev]};border-radius:99px;"></div>
+      </div>
+      <span style="width:22px;text-align:right">${s[sev]||0}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderFindings(findings) {
+  const list = document.getElementById('findings-list');
+  if (!findings.length) {
+    list.innerHTML = '<p style="color:var(--muted);font-size:.875rem;">No findings to display.</p>';
+    return;
+  }
+  const order = {critical:0,high:1,medium:2,low:3,info:4};
+  const sorted = [...findings].sort((a,b) => (order[a.severity]||9) - (order[b.severity]||9));
+
+  list.innerHTML = sorted.map((f,i) => `
+    <div class="finding-item">
+      <div class="finding-header" onclick="toggleFinding(${i})">
+        <span class="badge ${f.severity}">${f.severity}</span>
+        <span style="font-size:.875rem;font-weight:600;flex:1">${escHtml(f.title)}</span>
+        <span style="font-size:.75rem;color:var(--muted)">${f.module||''}</span>
+        <span style="color:var(--muted);margin-left:8px">▾</span>
+      </div>
+      <div class="finding-body" id="fb-${i}">
+        <div class="row"><strong>Description:</strong> ${escHtml(f.description||'')}</div>
+        <div class="row"><strong>Recommendation:</strong> ${escHtml(f.recommendation||'')}</div>
+        ${f.evidence ? `<div class="row"><strong>Evidence:</strong><br><code>${escHtml(f.evidence)}</code></div>` : ''}
+      </div>
+    </div>`).join('');
+}
+
+function toggleFinding(i) {
+  document.getElementById('fb-' + i).classList.toggle('open');
+}
+
+function filterFindings(sev, btn) {
+  document.querySelectorAll('#filter-row .btn').forEach(b => b.style.borderColor='');
+  btn.style.borderColor = 'var(--accent)';
+  const filtered = sev === 'all' ? allFindings : allFindings.filter(f => f.severity === sev);
+  renderFindings(filtered);
+}
+
+async function downloadReport() {
+  if (!currentScanId) return;
+  window.location.href = '/api/report/' + currentScanId;
+}
+
+// ── History ────────────────────────────────────────────────────────────────
+async function loadHistory() {
+  const cont = document.getElementById('history-content');
+  if (!currentUser) {
+    cont.innerHTML = '<p style="color:var(--muted);font-size:.875rem;">Sign in to view scan history.</p>';
+    return;
+  }
+  cont.innerHTML = '<p style="color:var(--muted);">Loading…</p>';
+  const r = await fetch('/api/history');
+  if (!r.ok) { cont.innerHTML = '<p style="color:var(--critical);">Failed to load history.</p>'; return; }
+  const d = await r.json();
+
+  if (!d.scans.length) {
+    cont.innerHTML = '<p style="color:var(--muted);font-size:.875rem;">No scans yet. Run your first scan!</p>';
+    return;
+  }
+  cont.innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Scan ID</th><th>Target</th><th>Status</th>
+        <th>Risk Score</th><th>Findings</th><th>Started</th><th>Actions</th>
+      </tr></thead>
+      <tbody>
+      ${d.scans.map(s => `
+        <tr>
+          <td style="font-family:monospace;font-size:.8rem">${s.scan_id}</td>
+          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(s.target)}</td>
+          <td><span class="badge ${s.status==='complete'?'low':'info'}">${s.status}</span></td>
+          <td><span style="font-weight:700;color:${s.risk_score>=70?'var(--critical)':s.risk_score>=40?'var(--high)':'var(--low)'}">${s.risk_score}/100</span></td>
+          <td>${s.finding_count}</td>
+          <td style="font-size:.75rem;color:var(--muted)">${new Date(s.started_at).toLocaleString()}</td>
+          <td>
+            <button class="btn btn-ghost btn-sm" onclick="reloadScan('${s.scan_id}')">View</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteScan('${s.scan_id}')">Del</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+async function reloadScan(scanId) {
+  currentScanId = scanId;
+  navigate('scan');
+  await loadResults(scanId);
+  document.getElementById('progress-card').style.display = 'none';
+}
+
+async function deleteScan(scanId) {
+  if (!confirm('Delete this scan?')) return;
+  await fetch('/api/history/' + scanId, {method:'DELETE'});
+  toast('Scan deleted', 'success');
+  loadHistory();
+}
+
+// ── Statistics ─────────────────────────────────────────────────────────────
+async function loadStats() {
+  const cont = document.getElementById('stats-content');
+  if (!currentUser) {
+    cont.innerHTML = '<p style="color:var(--muted);">Sign in to view statistics.</p>';
+    return;
+  }
+  const r = await fetch('/api/stats');
+  if (!r.ok) return;
+  const d = await r.json();
+
+  const colors = {critical:'var(--critical)',high:'var(--high)',medium:'var(--medium)',low:'var(--low)',info:'var(--info)'};
+  cont.innerHTML = `
+    <div class="stats-row">
+      <div class="stat-chip">
+        <div class="num" style="color:var(--accent)">${d.total_scans}</div>
+        <div class="lbl">Total Scans</div>
+      </div>
+      <div class="stat-chip">
+        <div class="num" style="color:var(--accent2)">${d.total_findings}</div>
+        <div class="lbl">Total Findings</div>
+      </div>
+      <div class="stat-chip">
+        <div class="num" style="color:${d.avg_risk_score>=70?'var(--critical)':d.avg_risk_score>=40?'var(--high)':'var(--low)'}">${d.avg_risk_score}</div>
+        <div class="lbl">Avg Risk Score</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">All-time Severity Breakdown</div>
+      ${Object.entries(d.severity_breakdown).map(([sev,cnt]) => `
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+          <span class="badge ${sev}" style="width:70px;text-align:center">${sev}</span>
+          <div style="flex:1;background:var(--border);border-radius:99px;height:10px;overflow:hidden;">
+            <div style="width:${Math.min(100,Math.round(cnt/(d.total_findings||1)*100))}%;height:100%;background:${colors[sev]};border-radius:99px;"></div>
+          </div>
+          <span style="font-weight:700;width:32px;text-align:right">${cnt}</span>
+        </div>`).join('')}
+    </div>`;
+}
+
+// ── Utils ──────────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className   = 'toast show ' + type;
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+checkSession();
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+version: "3.9"
+
+services:
+  cyberscout:
+    build: .
+    container_name: cyberscout
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./reports:/app/reports
+      - ./logs:/app/logs
+      - cyberscout_db:/app/instance
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+    restart: unless-stopped
+
+volumes:
+  cyberscout_db:
